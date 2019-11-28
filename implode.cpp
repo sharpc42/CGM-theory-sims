@@ -4,7 +4,7 @@
 // Licensed under the 3-clause BSD License, see LICENSE file for details
 //========================================================================================
 //! \file implode.cpp
-//  \brief Problem generator for spherical imploding cold CGM clou problem.  Works 
+//  \brief Problem generator for spherical imploding cold CGM cloud problem.  Works 
 //         as intended in Cartesian but will run in cylindrical and spherical
 //         coordinates.  Contains post-processing code to check whether blast is 
 //         spherical for regression tests
@@ -32,11 +32,6 @@
 #include "../bvals/bvals.hpp"
 #include "../utils/utils.hpp"
 
-//========================================================================================
-//! \fn void MeshBlock::ProblemGenerator(ParameterInput *pin)
-//  \brief Cold underpressurized CGM cloud implosion problem generator
-//========================================================================================
-
 static Real grav;
 
 Real rad;
@@ -44,6 +39,64 @@ Real pa;
 Real da;
 Real prat;
 Real drat;
+Real press_conv;
+
+void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<Real> &prim,
+                const AthenaArray<Real> &bcc, AthenaArray<Real> &cons) {
+
+  Real g          = pmb->peos->GetGamma();
+  Real gm1        = g - 1.0;
+
+  Real temp6	  = 8.6136e-3;                                  // in k_B * T_6 = P_6 / rho_6 units converted to code units
+  Real temp5	  = 0.1 * temp6;                                // T = 10^5 K as fraction of T = 10^6 K in code units
+  Real temp5_5    = 0.316228 * temp6;                           // T = 10^5.5 K as fraction of T = 10^6 K in code units
+  Real m_H        = 8.42e-58;                                   // hydrogen mass in solar mass code units (my God that's small)
+
+  press_conv = 1.543e16;                                        // in solar masses per kpc*squared Myr
+
+  for (int k = pmb->ks; k <= pmb->ke; ++k) {
+    for (int j = pmb->js; j <= pmb->je; ++j) {
+      for (int i = pmb->is; i <= pmb->ie; ++i) {
+        /**
+        Real x    = pcoord->x1v(i);
+        Real y    = pcoord->x2v(j);
+        Real z    = pcoord->x3v(k);
+        Real r    = std::sqrt(SQR(x) + SQR(y) + SQR(z));
+        **/
+        Real pres = prim(IEN,k,j,i);
+        Real dens = prim(IDN,k,j,i);
+        Real temp = gm1 * pres / dens;
+
+        Real numdens = dens / m_H;                                  // get number density in code units for this cell
+        Real t_cool = 250 * (pa / pres) * pow(temp / temp5_5,2.7);  // in Myr code units assuming metallicity ~ 0.3 (so correct to order-1)
+        Real lambda = t_cool * numdens / (5 * temp);                // get cooling parameter in code units
+
+//        if ((r < rad) && (temp > temp5)) {
+        cons(IEN,k,j,i) -= dt * lambda * SQR(numdens);              // cooling function cools cloud
+
+      }
+    }
+  }
+
+  return;
+}
+
+//==========================================================================
+//! \fn void Mesh::InitUserMeshData()
+//  \brief Enroll cooling function
+//==========================================================================
+
+void Mesh::InitUserMeshData(ParameterInput *pin) {
+
+  EnrollUserExplicitSourceFunction(CoolingFxn);
+
+  return;
+}
+
+//========================================================================================
+//! \fn void MeshBlock::ProblemGenerator(ParameterInput *pin)
+//  \brief Cold underpressurized CGM cloud implosion problem generator
+//========================================================================================
 
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
@@ -261,254 +314,45 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
 }
 
+//==========================================================================
+//! \fn void MeshBlock::UserWorkInLoop()
+//  \brief Use cooling function to update cells
+//==========================================================================
+
+void MeshBlock::UserWorkInLoop() {
+
+//  Real pa         = (pin->GetReal("problem","pamb")        // ambient pressure in the medium
+  //                  * press_conv);
+
+  int x,y,z;
+  Real r;
+
+  for (int k = ks; k <= ke; ++k) {
+    z = pcoord->x3v(k);
+  for (int j = js; j <= je; ++j) {
+    y = pcoord->x2v(j);
+  for (int i = is; i <= ie; ++i) {
+    x = pcoord->x1v(i);
+    r = std::sqrt(SQR(x) + SQR(y));
+    if (r <= rad)
+      //CoolingFxn(pmb,time,dt,phydro->w,pfield->b,phydro->u);
+      CoolingFxn;
+      // somehow update just this cell's energy with cooling function
+  }
+  }
+  }
+
+  return;
+}
+
 //========================================================================================
 //! \fn void Mesh::UserWorkAfterLoop(ParameterInput *pin)
-//  \brief Check radius of sphere to make sure it is round
 //========================================================================================
 
 void Mesh::UserWorkAfterLoop(ParameterInput *pin) {
   if (!pin->GetOrAddBoolean("problem","compute_error",false)) return;
   AthenaArray<Real> pr;
-  /**
-  // analysis - check shape of the spherical blast wave
-  int is=pblock->is, ie=pblock->ie;
-  int js=pblock->js, je=pblock->je;
-  int ks=pblock->ks, ke=pblock->ke;
-  AthenaArray<Real> pr;
-  pr.InitWithShallowSlice(pblock->phydro->w,4,IPR,1);
-
-  // get coordinate location of the center, convert to Cartesian
-  Real x1_0   = pin->GetOrAddReal("problem","x1_0",0.0);
-  Real x2_0   = pin->GetOrAddReal("problem","x2_0",0.0);
-  Real x3_0   = pin->GetOrAddReal("problem","x3_0",0.0);
-  Real x0,y0,z0;
-  if (COORDINATE_SYSTEM == "cartesian") {
-    x0 = x1_0;
-    y0 = x2_0;
-    z0 = x3_0;
-  } else if (COORDINATE_SYSTEM == "cylindrical") {
-    x0 = x1_0*std::cos(x2_0);
-    y0 = x1_0*std::sin(x2_0);
-    z0 = x3_0;
-  } else if (COORDINATE_SYSTEM == "spherical_polar") {
-    x0 = x1_0*std::sin(x2_0)*std::cos(x3_0);
-    y0 = x1_0*std::sin(x2_0)*std::sin(x3_0);
-    z0 = x1_0*std::cos(x2_0);
-  } else {
-    // Only check legality of COORDINATE_SYSTEM once in this function
-    std::stringstream msg;
-    msg << "### FATAL ERROR in blast.cpp ParameterInput" << std::endl
-        << "Unrecognized COORDINATE_SYSTEM= " << COORDINATE_SYSTEM << std::endl;
-    throw std::runtime_error(msg.str().c_str());
-  }
-
-  // find indices of the center
-  int ic, jc, kc;
-  for (ic=is; ic<=ie; ic++)
-    if (pblock->pcoord->x1f(ic) > x1_0) break;
-  ic--;
-  for (jc=pblock->js; jc<=pblock->je; jc++)
-    if (pblock->pcoord->x2f(jc) > x2_0) break;
-  jc--;
-  for (kc=pblock->ks; kc<=pblock->ke; kc++)
-    if (pblock->pcoord->x3f(kc) > x3_0) break;
-  kc--;
-
-  // search pressure maximum in each direction
-  Real rmax=0.0, rmin=100.0, rave=0.0;
-  int nr=0;
-  for (int o=0; o<=6; o++) {
-    int ios=0, jos=0, kos=0;
-    if (o==1) ios=-10;
-    else if (o==2) ios= 10;
-    else if (o==3) jos=-10;
-    else if (o==4) jos= 10;
-    else if (o==5) kos=-10;
-    else if (o==6) kos= 10;
-    for (int d=0; d<6; d++) {
-      Real pmax=0.0;
-      int imax, jmax, kmax;
-      if (d==0) {
-        if (ios!=0) continue;
-        jmax=jc+jos, kmax=kc+kos;
-        for (int i=ic; i>=is; i--) {
-          if (pr(kmax,jmax,i)>pmax) {
-            pmax=pr(kmax,jmax,i);
-            imax=i;
-          }
-        }
-      } else if (d==1) {
-        if (ios!=0) continue;
-        jmax=jc+jos, kmax=kc+kos;
-        for (int i=ic; i<=ie; i++) {
-          if (pr(kmax,jmax,i)>pmax) {
-            pmax=pr(kmax,jmax,i);
-            imax=i;
-          }
-        }
-      } else if (d==2) {
-        if (jos!=0) continue;
-        imax=ic+ios, kmax=kc+kos;
-        for (int j=jc; j>=js; j--) {
-          if (pr(kmax,j,imax)>pmax) {
-            pmax=pr(kmax,j,imax);
-            jmax=j;
-          }
-        }
-      } else if (d==3) {
-        if (jos!=0) continue;
-        imax=ic+ios, kmax=kc+kos;
-        for (int j=jc; j<=je; j++) {
-          if (pr(kmax,j,imax)>pmax) {
-            pmax=pr(kmax,j,imax);
-            jmax=j;
-          }
-        }
-      } else if (d==4) {
-        if (kos!=0) continue;
-        imax=ic+ios, jmax=jc+jos;
-        for (int k=kc; k>=ks; k--) {
-          if (pr(k,jmax,imax)>pmax) {
-            pmax=pr(k,jmax,imax);
-            kmax=k;
-          }
-        }
-      } else { // if (d==5) {
-        if (kos!=0) continue;
-        imax=ic+ios, jmax=jc+jos;
-        for (int k=kc; k<=ke; k++) {
-          if (pr(k,jmax,imax)>pmax) {
-            pmax=pr(k,jmax,imax);
-            kmax=k;
-          }
-        }
-      }
-
-      Real xm, ym, zm;
-      Real x1m=pblock->pcoord->x1v(imax);
-      Real x2m=pblock->pcoord->x2v(jmax);
-      Real x3m=pblock->pcoord->x3v(kmax);
-      if (COORDINATE_SYSTEM == "cartesian") {
-        xm = x1m;
-        ym = x2m;
-        zm = x3m;
-      } else if (COORDINATE_SYSTEM == "cylindrical") {
-        xm = x1m*std::cos(x2m);
-        ym = x1m*std::sin(x2m);
-        zm = x3m;
-      } else {  // if (COORDINATE_SYSTEM == "spherical_polar") {
-        xm = x1m*std::sin(x2m)*std::cos(x3m);
-        ym = x1m*std::sin(x2m)*std::sin(x3m);
-        zm = x1m*std::cos(x2m);
-      }
-      Real rad = std::sqrt(SQR(xm-x0)+SQR(ym-y0)+SQR(zm-z0));
-      if (rad>rmax) rmax=rad;
-      if (rad<rmin) rmin=rad;
-      rave+=rad;
-      nr++;
-    }
-  }
-  rave/=static_cast<Real>(nr);
-
-  // use physical grid spacing at center of blast
-  Real dr_max;
-  Real  x1c = pblock->pcoord->x1v(ic);
-  Real dx1c = pblock->pcoord->dx1f(ic);
-  Real  x2c = pblock->pcoord->x2v(jc);
-  Real dx2c = pblock->pcoord->dx2f(jc);
-  Real dx3c = pblock->pcoord->dx3f(kc);
-  if (COORDINATE_SYSTEM == "cartesian") {
-    dr_max = std::max(std::max(dx1c, dx2c), dx3c);
-  } else if (COORDINATE_SYSTEM == "cylindrical") {
-    dr_max = std::max(std::max(dx1c, x1c*dx2c), dx3c);
-  } else { // if (COORDINATE_SYSTEM == "spherical_polar") {
-    dr_max = std::max(std::max(dx1c, x1c*dx2c), x1c*std::sin(x2c)*dx3c);
-  }
-  Real deform=(rmax-rmin)/dr_max;
-
-  // only the root process outputs the data
-  if (Globals::my_rank == 0) {
-    std::string fname;
-    fname.assign("blastwave-shape.dat");
-    std::stringstream msg;
-    FILE *pfile;
-
-    // The file exists -- reopen the file in append mode
-    if ((pfile = fopen(fname.c_str(),"r")) != NULL) {
-      if ((pfile = freopen(fname.c_str(),"a",pfile)) == NULL) {
-        msg << "### FATAL ERROR in function [Mesh::UserWorkAfterLoop]"
-            << std::endl << "Blast shape output file could not be opened" <<std::endl;
-        throw std::runtime_error(msg.str().c_str());
-      }
-
-    // The file does not exist -- open the file in write mode and add headers
-    } else {
-      if ((pfile = fopen(fname.c_str(),"w")) == NULL) {
-        msg << "### FATAL ERROR in function [Mesh::UserWorkAfterLoop]"
-            << std::endl << "Blast shape output file could not be opened" <<std::endl;
-        throw std::runtime_error(msg.str().c_str());
-      }
-    }
-    fprintf(pfile,"# Offset blast wave test in %s coordinates:\n",COORDINATE_SYSTEM);
-    fprintf(pfile,"# Rmax       Rmin       Rave        Deformation\n");
-    fprintf(pfile,"%e  %e  %e  %e \n",rmax,rmin,rave,deform);
-    fclose(pfile);
-  }
-  **/
   pr.DeleteAthenaArray();
   return;
 }
 
-void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<Real> &prim,
-                const AthenaArray<Real> &bcc, AthenaArray<Real> &cons) {
-
-  Real g          = pmb->peos->GetGamma();
-  Real gm1        = g - 1.0;
-
-  Real temp6      = 8.6136e-3;                                  // in k_B * T_6 = P_6 / rho_6 units converted to code units
-  Real temp5      = 0.1 * temp6;                                // T = 10^5 K as fraction of T = 10^6 K in code units
-  Real temp5_5    = 0.316228 * temp6;                           // T = 10^5.5 K as fraction of T = 10^6 K in code units
-  Real m_H        = 8.42e-58;                                   // hydrogen mass in solar mass code units (my God that's small)
-
-  // Real rout       = pmb->pin->GetReal("problem","radius");      // radius of cloud's outer (only) boundary
-  Real press_conv = 1.543e16;                                   // in solar masses per kpc*squared Myr
-  // Real pa         = (pmb->pin->GetReal("problem","pamb",1.0)
-  //                  * press_conv);
-
-  for (int k = pmb->ks; k <= pmb->ke; ++k) {
-    for (int j = pmb->js; j <= pmb->ke; ++j) {
-      for (int i = pmb->is; i <= pmb->ie; ++i) {
-
-        Real x    = pmb->pcoord->x1v(i);
-        Real y    = pmb->pcoord->x2v(j);
-        Real z    = pmb->pcoord->x3v(k);
-        Real r    = std::sqrt(SQR(x) + SQR(y) + SQR(z));
-
-        Real pres = prim(IEN,k,j,i);
-        Real dens = prim(IDN,k,j,i);
-        Real temp = gm1 * pres / dens;
-
-        Real numdens = dens / m_H;                                  // get number density in code units for this cell
-        Real t_cool = 250 * (pa / pres) * pow(temp / temp5_5,2.7);  // in Myr code units assuming metallicity ~ 0.3 (so correct to order-1)
-        Real lambda = t_cool * numdens / (5 * temp);                // get cooling parameter in code units
-
-//        if ((r < rad) && (temp > temp5)) {
-        cons(IEN,k,j,i) -= dt * lambda * SQR(numdens);            //   though that isn't a very good assumption astrophysically)
-//        }
-      }
-    }
-  }
- 
-  return;
-}
-
-//==========================================================================
-//! \fn void Mesh::InitUserMeshData()
-//  \brief Enroll cooling function
-//==========================================================================
- 
-void Mesh::InitUserMeshData(ParameterInput *pin) {
-
-  EnrollUserExplicitSourceFunction(CoolingFxn);
-  return;
-}
