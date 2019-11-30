@@ -6,9 +6,7 @@
 //! \file implode.cpp
 //  \brief Problem generator for spherical imploding cold CGM cloud problem.  Works 
 //         as intended in Cartesian but will run in cylindrical and spherical
-//         coordinates.  Contains post-processing code to check whether blast is 
-//         spherical for regression tests
-//
+//         coordinates.
 
 // C++ headers
 #include <algorithm>
