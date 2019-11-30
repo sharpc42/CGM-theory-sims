@@ -57,12 +57,7 @@ void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArra
   for (int k = pmb->ks; k <= pmb->ke; ++k) {
     for (int j = pmb->js; j <= pmb->je; ++j) {
       for (int i = pmb->is; i <= pmb->ie; ++i) {
-        /**
-        Real x    = pcoord->x1v(i);
-        Real y    = pcoord->x2v(j);
-        Real z    = pcoord->x3v(k);
-        Real r    = std::sqrt(SQR(x) + SQR(y) + SQR(z));
-        **/
+
         Real pres = prim(IEN,k,j,i);
         Real dens = prim(IDN,k,j,i);
         Real temp = gm1 * pres / dens;
@@ -71,7 +66,6 @@ void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArra
         Real t_cool = 250 * (pa / pres) * pow(temp / temp5_5,2.7);  // in Myr code units assuming metallicity ~ 0.3 (so correct to order-1)
         Real lambda = t_cool * numdens / (5 * temp);                // get cooling parameter in code units
 
-//        if ((r < rad) && (temp > temp5)) {
         cons(IEN,k,j,i) -= dt * lambda * SQR(numdens);              // cooling function cools cloud
 
       }
@@ -311,7 +305,6 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
       }
     }
   }
-
 }
 
 //==========================================================================
@@ -321,25 +314,21 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
 void MeshBlock::UserWorkInLoop() {
 
-//  Real pa         = (pin->GetReal("problem","pamb")        // ambient pressure in the medium
-  //                  * press_conv);
-
   int x,y,z;
   Real r;
 
   for (int k = ks; k <= ke; ++k) {
     z = pcoord->x3v(k);
-  for (int j = js; j <= je; ++j) {
-    y = pcoord->x2v(j);
-  for (int i = is; i <= ie; ++i) {
-    x = pcoord->x1v(i);
-    r = std::sqrt(SQR(x) + SQR(y));
-    if (r <= rad)
-      //CoolingFxn(pmb,time,dt,phydro->w,pfield->b,phydro->u);
-      CoolingFxn;
-      // somehow update just this cell's energy with cooling function
-  }
-  }
+    for (int j = js; j <= je; ++j) {
+      y = pcoord->x2v(j);
+      for (int i = is; i <= ie; ++i) {
+        x = pcoord->x1v(i);
+        r = std::sqrt(SQR(x) + SQR(y));
+        if (r <= rad)
+          //CoolingFxn(pmb,time,dt,phydro->w,pfield->b,phydro->u);
+          CoolingFxn;
+      }
+    }
   }
 
   return;
@@ -355,4 +344,3 @@ void Mesh::UserWorkAfterLoop(ParameterInput *pin) {
   pr.DeleteAthenaArray();
   return;
 }
-
