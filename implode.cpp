@@ -3,10 +3,11 @@
 // Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
 // Licensed under the 3-clause BSD License, see LICENSE file for details
 //========================================================================================
-//! \file implode.cpp
-//  \brief Problem generator for spherical imploding cold CGM cloud problem.  Works 
-//         as intended in Cartesian but will run in cylindrical and spherical
-//         coordinates.
+//! \file   implode.cpp
+//  \author Christopher Sharp 
+//  \brief  Problem generator for spherical imploding cold CGM cloud problem.  Works 
+//          as intended in Cartesian but will run in cylindrical and spherical
+//          coordinates.
 
 // C++ headers
 #include <algorithm>
@@ -42,6 +43,8 @@ Real press_conv;
 void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<Real> &prim,
                 const AthenaArray<Real> &bcc, AthenaArray<Real> &cons) {
 
+  std::cout<<"I at least made it to the cooling fxn!!!";
+
   Real g          = pmb->peos->GetGamma();
   Real gm1        = g - 1.0;
 
@@ -50,21 +53,36 @@ void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArra
   Real temp5_5    = 0.316228 * temp6;                           // T = 10^5.5 K as fraction of T = 10^6 K in code units
   Real m_H        = 8.42e-58;                                   // hydrogen mass in solar mass code units (my God that's small)
 
-  press_conv = 1.543e16;                                        // in solar masses per kpc*squared Myr
+  Real x_0        = std::abs(pmb->ie - pmb->is) / 2;
+  Real y_0        = std::abs(pmb->je - pmb->js) / 2;
+  Real z_0        = std::abs(pmb->ke - pmb->ks) / 2;
+
+  Real x;
+  Real y;
+  Real z;  
+  Real r;
+  Real rad;
 
   for (int k = pmb->ks; k <= pmb->ke; ++k) {
+    z = -(k - z_0);
     for (int j = pmb->js; j <= pmb->je; ++j) {
+      y = -(j - y_0);
       for (int i = pmb->is; i <= pmb->ie; ++i) {
+        x   = -(i - x_0);
+        r   = std::pow((x * x + y * y + z * z),0.5);
+        rad = std::pow((x_0 * x_0 + y_0 * y_0 + z_0 * z_0),0.5) / 5;  // def. a bit arbitrary but will help resolve spatial scale in here
+
+        std::cout << "x y z r rad " << x << " " << y << " " << z << " " << r << " " << rad;
 
         Real pres = prim(IEN,k,j,i);
         Real dens = prim(IDN,k,j,i);
         Real temp = gm1 * pres / dens;
 
-        Real numdens = dens / m_H;                                  // get number density in code units for this cell
         Real t_cool = 250 * (pa / pres) * pow(temp / temp5_5,2.7);  // in Myr code units assuming metallicity ~ 0.3 (so correct to order-1)
-        Real lambda = t_cool * numdens / (5 * temp);                // get cooling parameter in code units
+        cons(IEN,k,j,i) -= ((dt / t_cool) * cons(IEN,k,j,i) 
+                           * std::exp(-(temp6 / temp) - (r / rad)));  // cooling that should die off exponential with lower temp and higher distance
 
-        cons(IEN,k,j,i) -= dt * lambda * SQR(numdens);              // cooling function cools cloud
+        std::cout << "presureratio tempratio tcool " <<  pa / pres << " " << temp / temp5_5 << " " << t_cool << " " << "\n\n";
 
       }
     }
@@ -180,6 +198,11 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 	} else {
 		phydro->u(IEN,k,j,i) += grav*den*(pcoord->x3v(k));
 	}
+
+    if (r < rad) {
+      std::cout<<"Inside the appropriate area";
+      CoolingFxn;
+    }
 
     // shouldn't need below if using a cooling function
     
@@ -305,6 +328,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   }
 }
 
+/**
+
 //==========================================================================
 //! \fn void MeshBlock::UserWorkInLoop()
 //  \brief Use cooling function to update cells
@@ -322,15 +347,21 @@ void MeshBlock::UserWorkInLoop() {
       for (int i = is; i <= ie; ++i) {
         x = pcoord->x1v(i);
         r = std::sqrt(SQR(x) + SQR(y));
-        if (r <= rad)
+        if (r <= rad) {
           //CoolingFxn(pmb,time,dt,phydro->w,pfield->b,phydro->u);
           CoolingFxn;
+          std::cout<<"I am cooling!\n\n";
+        } else {
+          std::cout<<"I'm not cooling\n\n";
+        }
       }
     }
   }
 
   return;
 }
+
+**/
 
 //========================================================================================
 //! \fn void Mesh::UserWorkAfterLoop(ParameterInput *pin)
