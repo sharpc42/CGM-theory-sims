@@ -43,7 +43,7 @@ Real press_conv;
 void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<Real> &prim,
                 const AthenaArray<Real> &bcc, AthenaArray<Real> &cons) {
 
-  std::cout<<"I at least made it to the cooling fxn!!!";
+  std::cout<<"I at least made it to the cooling fxn!!!\n\n";
 
   Real g          = pmb->peos->GetGamma();
   Real gm1        = g - 1.0;
@@ -51,7 +51,6 @@ void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArra
   Real temp6	  = 8.6136e-3;                                  // in k_B * T_6 = P_6 / rho_6 units converted to code units
   Real temp5	  = 0.1 * temp6;                                // T = 10^5 K as fraction of T = 10^6 K in code units
   Real temp5_5    = 0.316228 * temp6;                           // T = 10^5.5 K as fraction of T = 10^6 K in code units
-  Real m_H        = 8.42e-58;                                   // hydrogen mass in solar mass code units (my God that's small)
 
   Real x_0        = std::abs(pmb->ie - pmb->is) / 2;
   Real y_0        = std::abs(pmb->je - pmb->js) / 2;
@@ -63,6 +62,7 @@ void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArra
   Real r;
   Real rad;
 
+  // assuming some serious symmetry here for practical purposes
   for (int k = pmb->ks; k <= pmb->ke; ++k) {
     z = -(k - z_0);
     for (int j = pmb->js; j <= pmb->je; ++j) {
@@ -72,17 +72,20 @@ void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArra
         r   = std::pow((x * x + y * y + z * z),0.5);
         rad = std::pow((x_0 * x_0 + y_0 * y_0 + z_0 * z_0),0.5) / 5;  // def. a bit arbitrary but will help resolve spatial scale in here
 
-        std::cout << "x y z r rad " << x << " " << y << " " << z << " " << r << " " << rad;
+        std::cout << "x y z r rad " << x << " " << y << " " << z << " " << r << " " << rad << " " << "\n\n";
 
         Real pres = prim(IEN,k,j,i);
         Real dens = prim(IDN,k,j,i);
         Real temp = gm1 * pres / dens;
 
         Real t_cool = 250 * (pa / pres) * pow(temp / temp5_5,2.7);  // in Myr code units assuming metallicity ~ 0.3 (so correct to order-1)
-        cons(IEN,k,j,i) -= ((dt / t_cool) * cons(IEN,k,j,i) 
-                           * std::exp(-(temp6 / temp) - (r / rad)));  // cooling that should die off exponential with lower temp and higher distance
+        Real cooling = ((dt / t_cool) * cons(IEN,k,j,i) 
+                        * std::exp(-(temp6 / temp) - (r / rad)));  // cooling that should die off exponentially with lower temp and higher distance
 
-        std::cout << "presureratio tempratio tcool " <<  pa / pres << " " << temp / temp5_5 << " " << t_cool << " " << "\n\n";
+        std::cout << "coolratio " << cooling / cons(IEN,k,j,i) << " " << "\n\n";
+        cons(IEN,k,j,i) -= cooling;
+
+        // std::cout << "presureratio tempratio tcool " <<  pa / pres << " " << temp / temp5_5 << " " << t_cool << " " << "\n\n";
 
       }
     }
@@ -200,7 +203,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 	}
 
     if (r < rad) {
-      std::cout<<"Inside the appropriate area";
+      std::cout<<"Inside the appropriate area\n\n";
       CoolingFxn;
     }
 
