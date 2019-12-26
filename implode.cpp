@@ -52,25 +52,33 @@ void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArra
   Real temp5	  = 0.1 * temp6;                                // T = 10^5 K as fraction of T = 10^6 K in code units
   Real temp5_5    = 0.316228 * temp6;                           // T = 10^5.5 K as fraction of T = 10^6 K in code units
 
+  /**
   Real x_0        = std::abs(pmb->ie - pmb->is) / 2;
   Real y_0        = std::abs(pmb->je - pmb->js) / 2;
   Real z_0        = std::abs(pmb->ke - pmb->ks) / 2;
+  **/
+
+  Real x_0     	  = (pmb->pmy_mesh->mesh_size.x1max - pmb->pmy_mesh->mesh_size.x1min) / 2;
+  Real y_0        = (pmb->pmy_mesh->mesh_size.x2max - pmb->pmy_mesh->mesh_size.x2min) / 2;
+  Real z_0        = (pmb->pmy_mesh->mesh_size.x3max - pmb->pmy_mesh->mesh_size.x3min) / 2;
 
   Real x;
   Real y;
   Real z;  
   Real r;
-  Real rad;
+  Real rad = std::pow((x_0 * x_0 + y_0 * y_0 + z_0 * z_0),0.5) / 5;  // def. a bit arbitrary but will help resolve spatial scale in here;
 
   // assuming some serious symmetry here for practical purposes
   for (int k = pmb->ks; k <= pmb->ke; ++k) {
-    z = -(k - z_0);
+    //z = -(k - z_0);
+    z = pmb->pcoord->x3v(k);
     for (int j = pmb->js; j <= pmb->je; ++j) {
-      y = -(j - y_0);
+      //y = -(j - y_0);
+      y = pmb->pcoord->x2v(j);
       for (int i = pmb->is; i <= pmb->ie; ++i) {
-        x   = -(i - x_0);
+        //x   = -(i - x_0);
+        x   = pmb->pcoord->x3v(i);
         r   = std::pow((x * x + y * y + z * z),0.5);
-        rad = std::pow((x_0 * x_0 + y_0 * y_0 + z_0 * z_0),0.5) / 5;  // def. a bit arbitrary but will help resolve spatial scale in here
 
         std::cout << "x y z r rad " << x << " " << y << " " << z << " " << r << " " << rad << " " << "\n\n";
 
