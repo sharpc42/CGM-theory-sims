@@ -4,8 +4,8 @@
 // Licensed under the 3-clause BSD License, see LICENSE file for details
 //========================================================================================
 //! \file   implode.cpp
-//  \author Christopher Sharp 
-//  \brief  Problem generator for spherical imploding cold CGM cloud problem.  Works 
+//  \author Christopher Sharp
+//  \brief  Problem generator for spherical imploding cold CGM cloud problem.  Works
 //          as intended in Cartesian but will run in cylindrical and spherical
 //          coordinates.
 
@@ -43,8 +43,6 @@ Real press_conv;
 void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<Real> &prim,
                 const AthenaArray<Real> &bcc, AthenaArray<Real> &cons) {
 
-  std::cout<<"I at least made it to the cooling fxn!!!\n\n";
-
   Real g          = pmb->peos->GetGamma();
   Real gm1        = g - 1.0;
 
@@ -64,7 +62,7 @@ void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArra
 
   Real x;
   Real y;
-  Real z;  
+  Real z;
   Real r;
   Real rad = std::pow((x_0 * x_0 + y_0 * y_0 + z_0 * z_0),0.5) / 5;  // def. a bit arbitrary but will help resolve spatial scale in here;
 
@@ -80,20 +78,24 @@ void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArra
         x   = pmb->pcoord->x3v(i);
         r   = std::pow((x * x + y * y + z * z),0.5);
 
-        std::cout << "x y z r rad " << x << " " << y << " " << z << " " << r << " " << rad << " " << "\n\n";
+        //std::cout << "x y z r rad " << x << " " << y << " " << z << " " << r << " " << rad << " " << "\n\n";
 
-        Real pres = prim(IEN,k,j,i);
-        Real dens = prim(IDN,k,j,i);
+        Real pres = cons(IEN,k,j,i);
+
+        Real dens = cons(IDN,k,j,i);
         Real temp = gm1 * pres / dens;
 
         Real t_cool = 250 * (pa / pres) * pow(temp / temp5_5,2.7);  // in Myr code units assuming metallicity ~ 0.3 (so correct to order-1)
-        Real cooling = ((dt / t_cool) * cons(IEN,k,j,i) 
+        Real cooling = (dt * cons(IEN,k,j,i)
                         * std::exp(-(temp6 / temp) - (r / rad)));  // cooling that should die off exponentially with lower temp and higher distance
+//        Real cooling = ((dt / t_cool) * cons(IEN,k,j,i)
+//                        * std::exp(-(temp6 / temp)));
 
-        std::cout << "coolratio " << cooling / cons(IEN,k,j,i) << " " << "\n\n";
+//        std::cout << "coolratio " << cooling / cons(IEN,k,j,i) << " " << "\n\n";
         cons(IEN,k,j,i) -= cooling;
+        //cons(IEN,k,j,i) -= 0.1 * cons(IEN,k,j,i); // just a test
 
-        // std::cout << "presureratio tempratio tcool " <<  pa / pres << " " << temp / temp5_5 << " " << t_cool << " " << "\n\n";
+//        std::cout << "presureratio tempratio tcool " <<  pa / pres << " " << temp / temp5_5 << " " << t_cool << " " << "\n\n";
 
       }
     }
@@ -121,7 +123,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
-  Real dens_conv  = 1.478e28;                                // in solar masses per cubic kpc  
+  Real dens_conv  = 1.478e28;                                // in solar masses per cubic kpc
   Real vel_conv   = 1.022e-6;                                // in kpc per Myr
   Real press_conv = 1.543e16;                                // in solar masses per kpc*squared Myr
 
@@ -142,7 +144,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
   Real gamma = peos->GetGamma();
   Real gm1   = gamma - 1.0;
-  
+
   grav = phydro->hsrc.GetG2();
 
   // get coordinates of center of blast and converts to Cartesian if needed
@@ -169,7 +171,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         << "Unrecognized COORDINATE_SYSTEM= " << COORDINATE_SYSTEM << std::endl;
     throw std::runtime_error(msg.str().c_str());
   }
-  
+
   // setup uniform ambient medium with spherical cold region
   for (int k=ks; k<=ke; k++) {
   for (int j=js; j<=je; j++) {
@@ -194,29 +196,38 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
     Real den = da;
 
-    phydro->u(IDN,k,j,i) = den;    
+    phydro->u(IDN,k,j,i) = den;
     phydro->u(IM1,k,j,i) = 0.0 * den;
+    /**
+    if (r < rad) {
+      phydro->u(IM2,k,j,i) = 0.0001 * den;
+    } else {
+      phydro->u(IM2,k,j,i) = 0.0 * den;
+    }
+    **/
     phydro->u(IM2,k,j,i) = 0.0 * den;
     phydro->u(IM3,k,j,i) = 0.0 * den;
-        
+
     // This sets gravitational energy for 2D and 3D cases seperately.
     // Gravitational acceleration should be passed as a user parameter
     // with units in accordance with kpc Myr^-2 (for us: 10^-5 kpc Myr^-2).
     // If desiring a gravitational source located "below" the simulated space:
-    
+/**
     if (block_size.nx3 == 1) {
 	  phydro->u(IEN,k,j,i) += grav * den * std::abs(pcoord->x2v(j) - 0.5 * (pcoord->x2v(js) - pcoord->x2v(je)));
 	} else {
 		phydro->u(IEN,k,j,i) += grav*den*(pcoord->x3v(k));
 	}
+**/
 
+/**
     if (r < rad) {
       std::cout<<"Inside the appropriate area\n\n";
-      CoolingFxn;
+      phydro->u(IEN,k,j,i) -= CoolingFxn;
     }
-
+**/
     // shouldn't need below if using a cooling function
-    
+
     if (NON_BAROTROPIC_EOS) {
       Real pres = pa;
       //if (rad < rin) {                     // originally less than rout
@@ -224,30 +235,28 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
           //pres = pa / prat;
         //} else {                           // add smooth ramp in pressure
           //Real f = (rad-rin) / (rout-rin);
-         
+
         // original - as we enter the boundary, over-pressure dominates;
         // as we traverse through it, ambient pressure begins to dominate
-         
-        
+
         //Real log_pres = (1.0-f) * std::log(prat*pa) + f * std::log(pa);
-        
-         
+
         // User - as we enter the boundary, ambient pressure dominates;
         // as we traverse through it, over-pressure begins to dominate
         // Note: doesn't seem to matter for now which is pa or prat*pa,
         // since there is no transition region at present, but this log
         // ramp does need to be included for good physical results
           //Real log_pres = f * std::log(prat*pa) + (1.0-f) * std::log(pa);
-         
+
           //pres = std::exp(log_pres);
         }
       }
 
       // phydro->u(IEN,k,j,i) += pres/gm1;
-      
+
 //      if (RELATIVISTIC_DYNAMICS)  // this should only ever be SR with this file
 //        phydro->u(IEN,k,j,i) += den;
-     
+
 //    }
 
   }}
@@ -268,10 +277,10 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
             // particular problem generator, according to user input
             // then this particular pgen could simply check divergence
             // req, but then is that already handled by Athena itself?
-            
+
             // currently: spatially periodic field
             pfield->b.x1f(k,j,i) = b0 * std::cos(k_vec * pcoord->x1v(i)) * std::sin(k_vec * pcoord->x2v(j));
-            
+
             // only Cartesian supported for now; some way to handle general
             // conversion in the future?
           } else if (COORDINATE_SYSTEM == "cylindrical") {
