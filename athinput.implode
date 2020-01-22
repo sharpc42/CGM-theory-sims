@@ -1,10 +1,10 @@
-\<comment>
-problem   = spherical blast wave
+<comment>
+problem   = cold cloud implosion
 reference = Gardiner. T.A. & Stone, J.M., JCP, 205, 509 (2005) (for MHD version of test)
-configure = --prob=blast
+configure = --prob=implode
 
 <job>
-problem_id = Blast      # problem ID: basename of output filenames
+problem_id = implode      # problem ID: basename of output filenames
 
 <output1>
 file_type  = hst        # History data dump
@@ -13,7 +13,7 @@ dt         = 0.01       # time increment between outputs
 <output2>
 file_type  = vtk        # Binary data dump
 variable   = prim       # variables to be output
-dt         = 50       # time increment between outputs
+dt         = 10       # time increment between outputs
 
 <time>
 cfl_number = 0.3        # The Courant, Friedrichs, & Lewy (CFL) Number
@@ -24,17 +24,18 @@ xorder      = 2         # order of spatial reconstruction
 ncycle_out  = 1         # interval for stdout summary info
 
 <mesh>
-nx1        = 896        # Number of zones in X1-direction
-x1min      = -50        # minimum value of X1
-x1max      = 50         # maximum value of X1
-ix1_bc     = periodic   # inner-X1 boundary flag
-ox1_bc     = periodic   # outer-X1 boundary flag
+nx1        = 256        # Number of zones in X1-direction
+x1min      = -100        # minimum value of X1
+x1max      = 100         # maximum value of X1
+ix1_bc     = outflow   # inner-X1 boundary flag
+ox1_bc     = outflow   # outer-X1 boundary flag
 
-nx2        = 1792        # Number of zones in X2-direction
-x2min      = -125        # minimum value of X2
-x2max      = 125         # maximum value of X2
+nx2        = 512        # Number of zones in X2-direction
+x2min      = -200        # minimum value of X2
+x2max      = 200         # maximum value of X2
 ix2_bc     = outflow   # inner-X2 boundary flag
-ox2_bc     = outflow   # outer-X2 boundary flag
+ox2_bc     = reflecting   # outer-X2 boundary flag
+#ox2_bc     = outflow   # outer-X2 boundary flag
 
 nx3        = 1         # Number of zones in X3-direction
 x3min      = -1        # minimum value of X3
@@ -42,24 +43,19 @@ x3max      = 1         # maximum value of X3
 ix3_bc     = periodic   # inner-X3 boundary flag
 ox3_bc     = periodic   # outer-X3 boundary flag
 
-<meshblock>
-nx1        = 32
-nx2        = 32
-nx3        = 1
-
 <hydro>
 gamma           = 2.5 # gamma = C_p/C_v
 iso_sound_speed = 0.4082482905   # equavalent to sqrt(gamma*p/d) for p=0.1, d=1
-grav_acc2       = -0.005057      # gravitational acceleration in kpc Myr^-2
+#grav_acc2       = 0.00021      # gravitational acceleration in kpc Myr^-2
 
 <problem>
 computer_error = false
 pamb       = 1.381e-15    # ambient pressure in Pascals
-prat       = 100.         # Pressure ratio initially
+prat       = 1.         # Pressure ratio initially
 radius     = 10            # Radius of inner sphere
 damb       = 1.67372e-25  # ambient density in kg m^-3
 drat       = 1.0
 ramp       = 0.0
 b0         = 10            # fraction of pressure in magnetic field
-angle      = 90
+angle      = 45
 x2_0       = 63
