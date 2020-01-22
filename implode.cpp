@@ -46,57 +46,45 @@ void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArra
   Real g          = pmb->peos->GetGamma();
   Real gm1        = g - 1.0;
 
-  Real temp6	  = 8.6136e-3;                                  // in k_B * T_6 = P_6 / rho_6 units converted to code units
+  Real temp6	  = 0.012;                                  // in k_B * T_6 = P_6 / rho_6 units converted to code units
+  							    // (this is a ballpark, should make more precise later on)
   Real temp5	  = 0.1 * temp6;                                // T = 10^5 K as fraction of T = 10^6 K in code units
   Real temp5_5    = 0.316228 * temp6;                           // T = 10^5.5 K as fraction of T = 10^6 K in code units
-
-  /**
-  Real x_0        = std::abs(pmb->ie - pmb->is) / 2;
-  Real y_0        = std::abs(pmb->je - pmb->js) / 2;
-  Real z_0        = std::abs(pmb->ke - pmb->ks) / 2;
-  **/
 
   Real x_0     	  = (pmb->pmy_mesh->mesh_size.x1max - pmb->pmy_mesh->mesh_size.x1min) / 2;
   Real y_0        = (pmb->pmy_mesh->mesh_size.x2max - pmb->pmy_mesh->mesh_size.x2min) / 2;
   Real z_0        = (pmb->pmy_mesh->mesh_size.x3max - pmb->pmy_mesh->mesh_size.x3min) / 2;
 
+  Real t;
   Real x;
   Real y;
   Real z;
   Real r;
-  Real rad = std::pow((x_0 * x_0 + y_0 * y_0 + z_0 * z_0),0.5) / 5;  // def. a bit arbitrary but will help resolve spatial scale in here;
+  Real R = (pmb->pmy_mesh->mesh_size.x2max - pmb->pmy_mesh->mesh_size.x2min) / 40;
 
   // assuming some serious symmetry here for practical purposes
   for (int k = pmb->ks; k <= pmb->ke; ++k) {
-    //z = -(k - z_0);
     z = pmb->pcoord->x3v(k);
     for (int j = pmb->js; j <= pmb->je; ++j) {
-      //y = -(j - y_0);
       y = pmb->pcoord->x2v(j);
       for (int i = pmb->is; i <= pmb->ie; ++i) {
-        //x   = -(i - x_0);
-        x   = pmb->pcoord->x3v(i);
+        t   = t + dt;
+        x   = pmb->pcoord->x1v(i);
         r   = std::pow((x * x + y * y + z * z),0.5);
 
-        //std::cout << "x y z r rad " << x << " " << y << " " << z << " " << r << " " << rad << " " << "\n\n";
-
         Real pres = cons(IEN,k,j,i);
-
         Real dens = cons(IDN,k,j,i);
+
         Real temp = gm1 * pres / dens;
 
         Real t_cool = 250 * (pa / pres) * pow(temp / temp5_5,2.7);  // in Myr code units assuming metallicity ~ 0.3 (so correct to order-1)
-        Real cooling = (dt * cons(IEN,k,j,i)
-                        * std::exp(-(temp6 / temp) - (r / rad)));  // cooling that should die off exponentially with lower temp and higher distance
-//        Real cooling = ((dt / t_cool) * cons(IEN,k,j,i)
-//                        * std::exp(-(temp6 / temp)));
+        Real cooling = ((dt / temp5) * cons(IEN,k,j,i)
+                        * std::exp(-(temp6 / temp) - (r / R)));
+        // cooling that should die off exponentially with lower temp and higher distance
 
-//        std::cout << "coolratio " << cooling / cons(IEN,k,j,i) << " " << "\n\n";
-        cons(IEN,k,j,i) -= cooling;
-        //cons(IEN,k,j,i) -= 0.1 * cons(IEN,k,j,i); // just a test
-
-//        std::cout << "presureratio tempratio tcool " <<  pa / pres << " " << temp / temp5_5 << " " << t_cool << " " << "\n\n";
-
+        if (temp > temp5) {
+          cons(IEN,k,j,i) -= cooling;
+        }
       }
     }
   }
@@ -145,7 +133,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   Real gamma = peos->GetGamma();
   Real gm1   = gamma - 1.0;
 
-  grav = phydro->hsrc.GetG2();
+  //grav = phydro->hsrc.GetG2();
 
   // get coordinates of center of blast and converts to Cartesian if needed
   Real x1_0   = pin->GetOrAddReal("problem","x1_0",0.0);
@@ -197,7 +185,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     Real den = da;
 
     phydro->u(IDN,k,j,i) = den;
-    phydro->u(IM1,k,j,i) = 0.0 * den;
+    phydro->u(IM1,k,j,i) = 0.0;
     /**
     if (r < rad) {
       phydro->u(IM2,k,j,i) = 0.0001 * den;
@@ -205,21 +193,20 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
       phydro->u(IM2,k,j,i) = 0.0 * den;
     }
     **/
-    phydro->u(IM2,k,j,i) = 0.0 * den;
-    phydro->u(IM3,k,j,i) = 0.0 * den;
+    phydro->u(IM2,k,j,i) = 0.0;
+    phydro->u(IM3,k,j,i) = 0.0;
 
     // This sets gravitational energy for 2D and 3D cases seperately.
     // Gravitational acceleration should be passed as a user parameter
     // with units in accordance with kpc Myr^-2 (for us: 10^-5 kpc Myr^-2).
     // If desiring a gravitational source located "below" the simulated space:
-/**
+    /**
     if (block_size.nx3 == 1) {
 	  phydro->u(IEN,k,j,i) += grav * den * std::abs(pcoord->x2v(j) - 0.5 * (pcoord->x2v(js) - pcoord->x2v(je)));
 	} else {
 		phydro->u(IEN,k,j,i) += grav*den*(pcoord->x3v(k));
 	}
-**/
-
+    **/
 /**
     if (r < rad) {
       std::cout<<"Inside the appropriate area\n\n";
@@ -227,13 +214,16 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     }
 **/
     // shouldn't need below if using a cooling function
+    // except in fact may be best initial perturbation?
 
-    if (NON_BAROTROPIC_EOS) {
-      Real pres = pa;
+    //if (NON_BAROTROPIC_EOS) {
+    Real pres = pa;
       //if (rad < rin) {                     // originally less than rout
-        //if (rad < rout) {                  // originally less than rin
-          //pres = pa / prat;
-        //} else {                           // add smooth ramp in pressure
+    if (r < rad) {                  // originally less than rin
+        pres = pa / prat;
+    }
+    std::cout << "press: " << pres << "\n\n";
+        //else {                           // add smooth ramp in pressure
           //Real f = (rad-rin) / (rout-rin);
 
         // original - as we enter the boundary, over-pressure dominates;
@@ -249,15 +239,15 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
           //Real log_pres = f * std::log(prat*pa) + (1.0-f) * std::log(pa);
 
           //pres = std::exp(log_pres);
-        }
-      }
+        //}
+      //}
 
-      // phydro->u(IEN,k,j,i) += pres/gm1;
+    phydro->u(IEN,k,j,i) += pres/gm1;
 
 //      if (RELATIVISTIC_DYNAMICS)  // this should only ever be SR with this file
 //        phydro->u(IEN,k,j,i) += den;
 
-//    }
+    }
 
   }}
 
@@ -265,7 +255,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   if (MAGNETIC_FIELDS_ENABLED) {
 
     Real kpcPerCell = (pcoord->x1v(ie) - pcoord->x1v(is)) / (ie - is);
-    Real k_vec      = 2 * PI / (20 * kpcPerCell);
+    Real k_vec      = 2 * PI / (2 * kpcPerCell);
 
     for (int k = ks; k <= ke; ++k) {
       for (int j = js; j <= je; ++j) {
@@ -279,8 +269,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
             // req, but then is that already handled by Athena itself?
 
             // currently: spatially periodic field
-            pfield->b.x1f(k,j,i) = b0 * std::cos(k_vec * pcoord->x1v(i)) * std::sin(k_vec * pcoord->x2v(j));
-
+            //pfield->b.x1f(k,j,i) = b0 * std::cos(k_vec * pcoord->x1v(i)) * std::sin(k_vec * pcoord->x2v(j));
+            pfield->b.x1f(k,j,i) = b0 * std::cos(angle);
             // only Cartesian supported for now; some way to handle general
             // conversion in the future?
           } else if (COORDINATE_SYSTEM == "cylindrical") {
@@ -302,9 +292,10 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
           if (COORDINATE_SYSTEM == "cartesian") {
 
             // again, may go with imported function/object for generic magnetic fields; here, spatially periodic
-            pfield->b.x2f(k,j,i) = -1 * b0 * std::sin(k_vec * pcoord->x1v(i)) * std::cos(k_vec * pcoord->x2v(j)); 
+            //pfield->b.x2f(k,j,i) = -1 * b0 * std::sin(k_vec * pcoord->x1v(i)) * std::cos(k_vec * pcoord->x2v(j)); 
+            pfield->b.x2f(k,j,i) = b0 * std::sin(angle);
 
-            // again, only Cartesian supported at this time            
+            // again, only Cartesian supported at this time
           } else if (COORDINATE_SYSTEM == "cylindrical") {
             Real phi = pcoord->x2v(j);
             pfield->b.x2f(k,j,i) =
@@ -322,7 +313,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     }
     // this is interesting -- if we pursue a systematic approach where we iterate through
     // topologies of *vector potentials* then take the curl of the magnetic field (in which
-    // case also a divergenceless check is not needed) then we face the possibility of 
+    // case also a divergenceless check is not needed) then we face the possibility of
     // having non-zero z components organically: but sometimes in the 2D plane. How to handle
     // correctly in the general case?
     for (int k = ks; k <= ke+1; ++k) {
