@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <string>
 #include <math.h>
+#include <vector>
 
 // Athena++ headers
 #include "../athena.hpp"
@@ -40,14 +41,67 @@ Real prat;
 Real drat;
 Real press_conv;
 
-void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<Real> &prim,
+Real temp6 = 0.012;                                         // in k_B * T_6 = P_6 / rho_6 units converted to code units
+                                                            // (this is a ballpark, should make more precise later on)
+//Real g;
+//Real gm1;
+
+//std::vector<Real> cool_avg;  // collect average cooling values
+//int time_step = 0;
+
+/**
+void HeatingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<Real> &prim,
+                const AthenaArray<Real> &bcc, AthenaArray<Real> &cons) {
+
+  // Create a global array for collecting spatial cooling rate values at each time step
+  // This is to be used here to do a spatial average, the opposite and equal of which will
+  // be the heating rate for the determined areas of the mesh. At the end of each time
+  // step, the array will need to be emptied for the next time step. The likely best way
+  // to do this given Athena's structure is via MeshBlock::UserWorkAfterLoop; reference
+  // towards the end of this source file for the relevant code.
+
+  Real pres;
+  Real dens;
+  Real temp;
+  Real heating;
+
+  Real x;
+  Real y;
+  Real z;
+  Real r;
+  Real R = (pmb->pmy_mesh->mesh_size.x2max - pmb->pmy_mesh->mesh_size.x2min) / 40;
+
+  std::cout << "The HEATING function has been called\n\n";
+
+  for (int k = pmb->ks; k <= pmb->ke; ++k) {
+    z = pmb->pcoord->x3v(k);
+    for (int j = pmb->js; j <= pmb->je; ++j) {
+      y = pmb->pcoord->x2v(j);
+      for (int i = pmb->is; i <= pmb->ie; ++i) {
+        x = pmb->pcoord->x1v(i);
+        r = std::pow(x * x + y * y + z * z,0.5);
+
+        heating = cool_avg.at(time_step);
+        pres = cons(IEN,k,j,i);
+        dens = cons(IDN,k,j,i);
+        temp = gm1 * pres / dens;
+
+        if ((temp <= temp6) && (r > R)) {
+          cons(IEN,k,j,i) += heating;
+        }
+      }
+    }
+  }
+
+}
+**/
+
+void CoolHeat(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<Real> &prim,
                 const AthenaArray<Real> &bcc, AthenaArray<Real> &cons) {
 
   Real g          = pmb->peos->GetGamma();
   Real gm1        = g - 1.0;
 
-  Real temp6	  = 0.012;                                  // in k_B * T_6 = P_6 / rho_6 units converted to code units
-  							    // (this is a ballpark, should make more precise later on)
   Real temp5	  = 0.1 * temp6;                                // T = 10^5 K as fraction of T = 10^6 K in code units
   Real temp5_5    = 0.316228 * temp6;                           // T = 10^5.5 K as fraction of T = 10^6 K in code units
 
@@ -62,6 +116,16 @@ void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArra
   Real r;
   Real R = (pmb->pmy_mesh->mesh_size.x2max - pmb->pmy_mesh->mesh_size.x2min) / 40;
 
+  Real pres;
+  Real dens;
+  Real temp;
+  Real t_cool;
+  Real cooling;
+  Real heating;
+
+  Real cool_sum = 0.0;  // for the spatial average of cooling values
+  int cell_sum  = 0;   // to divide for the spatial average
+
   // assuming some serious symmetry here for practical purposes
   for (int k = pmb->ks; k <= pmb->ke; ++k) {
     z = pmb->pcoord->x3v(k);
@@ -72,25 +136,102 @@ void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArra
         x   = pmb->pcoord->x1v(i);
         r   = std::pow((x * x + y * y + z * z),0.5);
 
-        Real pres = cons(IEN,k,j,i);
-        Real dens = cons(IDN,k,j,i);
+        pres = cons(IEN,k,j,i);
+        dens = cons(IDN,k,j,i);
 
-        Real temp = gm1 * pres / dens;
+        temp = gm1 * pres / dens;
 
-        Real t_cool = 250 * (pa / pres) * pow(temp / temp5_5,2.7);  // in Myr code units assuming metallicity ~ 0.3 (so correct to order-1)
-        Real cooling = ((dt / temp5) * cons(IEN,k,j,i)
+        t_cool = 250 * (pa / pres) * pow(temp / temp5_5,2.7);  // in Myr code units assuming metallicity ~ 0.3 (so correct to order-1)
+        cooling = ((dt / temp5) * cons(IEN,k,j,i)
                         * std::exp(-(temp6 / temp) - (r / R)));
         // cooling that should die off exponentially with lower temp and higher distance
 
         if (temp > temp5) {
           cons(IEN,k,j,i) -= cooling;
+          cool_sum += cooling;
+        }
+        cell_sum++;
+      }
+    }
+  }
+
+  heating = cool_sum / cell_sum;
+//  cool_avg.push_back(cool_sum / cell_sum);
+//  time_step++;
+
+  for (int k = pmb->ks; k <= pmb->ke; ++k) {
+    z = pmb->pcoord->x3v(k);
+    for (int j = pmb->js; j <= pmb->je; ++j) {
+      y = pmb->pcoord->x2v(j);
+      for (int i = pmb->is; i <= pmb->ie; ++i) {
+        x = pmb->pcoord->x1v(j);
+        r = std::pow(x * x + y * y + z * z,0.5);
+
+        pres = cons(IEN,k,j,i);
+        dens = cons(IDN,k,j,i);
+        temp = gm1 * pres / dens;
+
+        if ((temp < temp6) && (r > R)) {
+          cons(IEN,k,j,i) += heating;
+        }
+      }
+    }
+  }
+  return;
+}
+
+// The idea is that this is equal and opposite to the spatially average cooling of the box.
+// The question is -- one for Matt -- whether we should get rid of the exponential in the
+// cooling function at least with regards to its spatial dependence: then the heating instead
+// should be what has a spatial dependence? Or is the idea when it comes to mimicking McCourt
+// that we want to see if our approximations yield the same results? Help me, Matt!
+
+/**
+void HeatingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<Real> &prim,
+                const AthenaArray<Real> &bcc, AthenaArray<Real> &cons) {
+
+  // Create a global array for collecting spatial cooling rate values at each time step
+  // This is to be used here to do a spatial average, the opposite and equal of which will
+  // be the heating rate for the determined areas of the mesh. At the end of each time
+  // step, the array will need to be emptied for the next time step. The likely best way
+  // to do this given Athena's structure is via MeshBlock::UserWorkAfterLoop; reference
+  // towards the end of this source file for the relevant code.
+
+  Real pres;
+  Real dens;
+  Real temp;
+  Real heating;
+
+  Real x;
+  Real y;
+  Real z;
+  Real r;
+  Real R = (pmb->pmy_mesh->mesh_size.x2max - pmb->pmy_mesh->mesh_size.x2min) / 40;
+
+  std::cout << "The HEATING function has been called\n\n";
+
+  for (int k = pmb->ks; k <= pmb->ke; ++k) {
+    z = pmb->pcoord->x3v(k);
+    for (int j = pmb->js; j <= pmb->je; ++j) {
+      y = pmb->pcoord->x2v(j);
+      for (int i = pmb->is; i <= pmb->ie; ++i) {
+        x = pmb->pcoord->x1v(i);
+        r = std::pow(x * x + y * y + z * z,0.5);
+
+        heating = cool_avg.at(time_step);
+        pres = cons(IEN,k,j,i);
+        dens = cons(IDN,k,j,i);
+        temp = gm1 * pres / dens;
+
+        if ((temp <= temp6) && (r > R)) {
+          cons(IEN,k,j,i) += heating;
         }
       }
     }
   }
 
-  return;
 }
+**/
 
 //==========================================================================
 //! \fn void Mesh::InitUserMeshData()
@@ -99,7 +240,8 @@ void CoolingFxn(MeshBlock *pmb, const Real time, const Real dt, const AthenaArra
 
 void Mesh::InitUserMeshData(ParameterInput *pin) {
 
-  EnrollUserExplicitSourceFunction(CoolingFxn);
+//  EnrollUserExplicitSourceFunction(HeatingFxn);
+  EnrollUserExplicitSourceFunction(CoolHeat);
 
   return;
 }
@@ -222,7 +364,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     if (r < rad) {                  // originally less than rin
         pres = pa / prat;
     }
-    std::cout << "press: " << pres << "\n\n";
+//    std::cout << "press: " << pres << "\n\n";
         //else {                           // add smooth ramp in pressure
           //Real f = (rad-rin) / (rout-rin);
 
