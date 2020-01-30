@@ -46,7 +46,7 @@ ox3_bc     = periodic   # outer-X3 boundary flag
 <hydro>
 gamma           = 2.5 # gamma = C_p/C_v
 iso_sound_speed = 0.4082482905   # equavalent to sqrt(gamma*p/d) for p=0.1, d=1
-#grav_acc2       = 0.00021      # gravitational acceleration in kpc Myr^-2
+grav_acc2       = 0.00021      # gravitational acceleration in kpc Myr^-2
 
 <problem>
 computer_error = false
@@ -57,5 +57,5 @@ damb       = 1.67372e-25  # ambient density in kg m^-3
 drat       = 1.0
 ramp       = 0.0
 b0         = 10            # fraction of pressure in magnetic field
-angle      = 45
+angle      = 0
 x2_0       = 63
