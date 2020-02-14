@@ -324,7 +324,12 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
       r = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
     }
 
-    Real den = da;
+    Real H   = (pmy_mesh->mesh_size.x2max - pmy_mesh->mesh_size.x2min) / 2 + pcoord->x2v(j);
+    Real a   = (pmy_mesh->mesh_size.x2max - pmy_mesh->mesh_size.x2min) / 10;
+    Real den = da * std::exp(-0.1 * (std::pow(1 + (H / a) * (H / a),0.5) - 1));
+    //Real den = 3 * da * std::exp(-1 * (H / x2_0));  // more straightforward atmospheric density dropoff
+    //std::cout << "pa " << pa;
+    //Real den = da;
 
     phydro->u(IDN,k,j,i) = den;
     phydro->u(IM1,k,j,i) = 0.0;
