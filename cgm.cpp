@@ -1,4 +1,4 @@
-	//========================================================================================
+//========================================================================================
 // Athena++ astrophysical MHD code
 // Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
 // Licensed under the 3-clause BSD License, see LICENSE file for details
@@ -34,6 +34,9 @@
 #include "../bvals/bvals.hpp"
 #include "../utils/utils.hpp"
 
+ // User headers
+#include "writefile.hpp"
+
 using namespace std;
 
 static Real grav;
@@ -49,6 +52,8 @@ Real lambda;
 
 Real temp6 = 0.012;                                         // in k_B * T_6 = P_6 / rho_6 units converted to code units
                                                             // (this is a ballpark, should make more precise later on)
+
+vector<Real> celldE;
 
 void CoolHeat(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<Real> &prim,
                 const AthenaArray<Real> &bcc, AthenaArray<Real> &cons) {
@@ -142,12 +147,17 @@ void CoolHeat(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<
 	Real dE = heating - cellCool;
     //    if ((dE > 0) && (temp > temp5) && (temp < temp7)) {
           cons(IEN,k,j,i) += dE;
+		  celldE.push_back(dE);
     //    } else if ((dE < 0) && (temp > temp5) && (temp < temp7)) {
     //      cons(IEN,k,j,i) /= (1 + std::abs(dE / cons(IEN,k,j,i)));
+	//		celldE.push_back(1 / (1 + std::abs(dE / cons(IEN,k,j,i))));    // not sure about this one
     //    }
       }
     }
   }
+
+  writefile("cgm-dE.txt", celldE);
+
   return;
 }
 
