@@ -1,4 +1,4 @@
-//========================================================================================
+	//========================================================================================
 // Athena++ astrophysical MHD code
 // Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
 // Licensed under the 3-clause BSD License, see LICENSE file for details
@@ -44,6 +44,8 @@ Real da;
 Real prat;
 Real drat;
 Real press_conv;
+
+Real lambda;
 
 Real temp6 = 0.012;                                         // in k_B * T_6 = P_6 / rho_6 units converted to code units
                                                             // (this is a ballpark, should make more precise later on)
@@ -105,7 +107,7 @@ void CoolHeat(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<
 
         temp = gm1 * pres / dens; 
         
-        Real lambda = 0.1;
+        //Real lambda = 0.1;
 
         t_cool = 250 * (pa / pres) * pow(temp / temp5_5,2.7) / lambda;  // in Myr code units assuming metallicity ~ 0.3 (so correct to order-1)
 
@@ -134,12 +136,15 @@ void CoolHeat(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<
         dens = cons(IDN,k,j,i);
         temp = gm1 * pres / dens;
 
-	Real dE = heating - cool.pop();
-        if ((dE > 0) && (temp > temp5) && (temp < temp7)) {
+		Real cellCool = cool.front();
+		cool.pop(); 
+
+	Real dE = heating - cellCool;
+    //    if ((dE > 0) && (temp > temp5) && (temp < temp7)) {
           cons(IEN,k,j,i) += dE;
-        } else if ((dE < 0) && (temp > temp5) && (temp < temp7)) {
-          cons(IEN,k,j,i) /= (1 + std::abs(dE / cons(IEN,k,j,i)));
-        }
+    //    } else if ((dE < 0) && (temp > temp5) && (temp < temp7)) {
+    //      cons(IEN,k,j,i) /= (1 + std::abs(dE / cons(IEN,k,j,i)));
+    //    }
       }
     }
   }
@@ -153,6 +158,8 @@ void CoolHeat(MeshBlock *pmb, const Real time, const Real dt, const AthenaArray<
 //==========================================================================
 
 void Mesh::InitUserMeshData(ParameterInput *pin) {
+  
+	lambda = pin->GetReal("problem", "lambda");
 
 //  EnrollUserExplicitSourceFunction(HeatingFxn);
   EnrollUserExplicitSourceFunction(CoolHeat);
