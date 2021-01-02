@@ -1,0 +1,63 @@
+<comment>
+problem   = CGM virtual environment
+reference = Gardiner. T.A. & Stone, J.M., JCP, 205, 509 (2005) (for MHD version of test)
+configure = --prob=cgm
+
+<job>
+problem_id = cgm        # problem ID: basename of output filenames
+
+<output1>
+file_type  = hst        # History data dump
+dt         = 0.01       # time increment between outputs
+
+<output2>
+file_type  = vtk        # Binary data dump
+variable   = prim       # variables to be output
+dt         = 10       # time increment between outputs
+
+<time>
+cfl_number = 0.1        # The Courant, Friedrichs, & Lewy (CFL) Number
+nlim       = -1         # cycle limit
+tlim       = 9000        # time limit
+integrator  = vl2       # time integration algorithm
+xorder      = 2         # order of spatial reconstruction
+ncycle_out  = 1         # interval for stdout summary info
+
+<mesh>
+nx1        = 128        # Number of zones in X1-direction
+x1min      = -105       # minimum value of X1
+x1max      = 105        # maximum value of X1
+ix1_bc     = periodic   # inner-X1 boundary flag
+ox1_bc     = periodic   # outer-X1 boundary flag
+
+nx2        = 128        # Number of zones in X2-direction
+x2min      = -70        # minimum value of X2
+x2max      = 140        # maximum value of X2
+#ix2_bc    = outflow    # inner-X2 boundary flag
+ix2_bc     = reflecting # outer-X2 boundary flag
+#ox2_bc    = outflow    # outer-X2 boundary flag
+ox2_bc     = reflecting # outer-X2 boundary flag
+
+nx3        = 1          # Number of zones in X3-direction
+x3min      = -1         # minimum value of X3
+x3max      = 1          # maximum value of X3
+ix3_bc     = periodic   # inner-X3 boundary flag
+ox3_bc     = periodic   # outer-X3 boundary flag
+
+<hydro>
+gamma           = 2.5            # gamma = C_p/C_v
+iso_sound_speed = 0.4082482905   # equavalent to sqrt(gamma*p/d) for p=0.1, d=1
+grav_acc2       = -0.00021       # gravitational acceleration in code units
+
+<problem>
+computer_error = false
+pamb           = 1.381e-15    # ambient pressure in SI units
+prat           = 1.           # Pressure ratio initially
+radius         = 10           # Radius of inner sphere
+damb           = 1.67372e-25  # ambient density in SI units
+drat           = 1.0
+ramp           = 0.0
+pbrat          = 1e2          # ratio magnetic field pressure to thermal (assumed ~1fPa)
+angle          = 0            # for the magnetic field, x1-axis being 2n pi radians
+trat           = 1e-1         # fractional strength of cooling to gravity t_cool / t_dyn
+H              = 68.7282      # atmospheric scale height in code units
